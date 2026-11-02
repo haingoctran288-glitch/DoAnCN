@@ -110,11 +110,14 @@ public class AuthServiceImpl implements AuthService {
      */
     @Override
     public AuthResponse login(LoginRequest request) {
+        String identifier = request.getUsername() != null ? request.getUsername().trim() : "";
+
         authenticationManager.authenticate(
-                new UsernamePasswordAuthenticationToken(request.getUsername(), request.getPassword())
+                new UsernamePasswordAuthenticationToken(identifier, request.getPassword())
         );
 
-        User user = userRepository.findByUsername(request.getUsername())
+        User user = userRepository.findByUsername(identifier)
+                .or(() -> userRepository.findByEmail(identifier))
                 .orElseThrow(() -> new RuntimeException("Không tìm thấy tài khoản!"));
 
         if (Boolean.TRUE.equals(user.getIsBlocked())) {
@@ -246,11 +249,20 @@ public class AuthServiceImpl implements AuthService {
             throw new RuntimeException("Mã OTP không được để trống!");
         }
 
-        // Xác nhận OTP
-        VerifyOtpRequest verifyReq = new VerifyOtpRequest();
-        verifyReq.setEmail(user.getEmail());
-        verifyReq.setOtp(request.getOtp());
-        verifyOtp(verifyReq);
+        // Kiểm tra OTP: hỗ trợ cả trường hợp OTP đã được xác thực trước ở Bước 1 (isUsed = true)
+        Otp latestOtp = otpRepository.findTopByEmailOrderByCreatedAtDesc(user.getEmail())
+                .orElseThrow(() -> new RuntimeException("Không tìm thấy mã OTP! Vui lòng yêu cầu lại."));
+
+        if (!latestOtp.getCode().equals(request.getOtp())) {
+            throw new RuntimeException("Mã OTP không đúng!");
+        }
+
+        if (!latestOtp.isUsed()) {
+            VerifyOtpRequest verifyReq = new VerifyOtpRequest();
+            verifyReq.setEmail(user.getEmail());
+            verifyReq.setOtp(request.getOtp());
+            verifyOtp(verifyReq);
+        }
 
         // Kiểm tra mật khẩu cũ có đúng không
         if (!passwordEncoder.matches(request.getOldPassword(), user.getPassword())) {
@@ -312,14 +324,15 @@ public class AuthServiceImpl implements AuthService {
             throw new RuntimeException("Tài khoản của bạn chưa được liên kết email!");
         }
 
-        // Kiểm tra mật khẩu cũ có đúng không
-        if (!passwordEncoder.matches(request.getOldPassword(), user.getPassword())) {
-            throw new RuntimeException("Mật khẩu cũ không đúng!");
-        }
-
-        // Kiểm tra mật khẩu mới phải khác mật khẩu cũ
-        if (passwordEncoder.matches(request.getNewPassword(), user.getPassword())) {
-            throw new RuntimeException("Mật khẩu mới phải khác mật khẩu cũ!");
+        // Nếu có truyền mật khẩu cũ thì kiểm tra trước (tương thích ngược)
+        if (request != null && request.getOldPassword() != null && !request.getOldPassword().trim().isEmpty()) {
+            if (!passwordEncoder.matches(request.getOldPassword(), user.getPassword())) {
+                throw new RuntimeException("Mật khẩu cũ không đúng!");
+            }
+            if (request.getNewPassword() != null && !request.getNewPassword().trim().isEmpty()
+                    && passwordEncoder.matches(request.getNewPassword(), user.getPassword())) {
+                throw new RuntimeException("Mật khẩu mới phải khác mật khẩu cũ!");
+            }
         }
 
         String email = user.getEmail();

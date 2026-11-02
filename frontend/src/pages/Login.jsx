@@ -93,10 +93,10 @@ const Login = () => {
 
         <form onSubmit={handleSubmit} className="space-y-6 relative z-10">
           <div>
-            <label className="block text-sm font-medium text-gray-400 mb-2 uppercase tracking-wide">Tên đăng nhập</label>
+            <label className="block text-sm font-medium text-gray-400 mb-2 uppercase tracking-wide">Tên đăng nhập hoặc Email</label>
             <input type="text" required
               className="w-full bg-primary border border-gray-700 rounded-lg py-3 px-4 text-white focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent transition-all duration-300"
-              placeholder="Nhập username"
+              placeholder="Nhập username hoặc email"
               value={formData.username}
               onChange={(e) => setFormData({ ...formData, username: e.target.value })}
             />

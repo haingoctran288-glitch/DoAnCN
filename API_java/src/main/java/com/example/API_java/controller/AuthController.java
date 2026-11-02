@@ -71,7 +71,7 @@ public class AuthController {
                         ));
             }
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                    .body(Map.of("message", "Sai tên đăng nhập hoặc mật khẩu!"));
+                    .body(Map.of("message", "Sai tên đăng nhập/email hoặc mật khẩu!"));
         }
     }
 
@@ -138,7 +138,7 @@ public class AuthController {
      * Gửi OTP đổi mật khẩu
      */
     @PostMapping("/change-password/send-otp")
-    public ResponseEntity<?> sendChangePasswordOtp(@RequestBody ChangePasswordRequest request,
+    public ResponseEntity<?> sendChangePasswordOtp(@RequestBody(required = false) ChangePasswordRequest request,
                                                     Authentication authentication) {
         try {
             String username = authentication.getName();

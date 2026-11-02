@@ -63,4 +63,46 @@ public class Review {
     protected void onUpdate() {
         this.updatedAt = LocalDateTime.now();
     }
+
+    public Integer getId() { return id; }
+    public void setId(Integer id) { this.id = id; }
+
+    public User getUser() { return user; }
+    public void setUser(User user) { this.user = user; }
+
+    public Staff getBarber() { return barber; }
+    public void setBarber(Staff barber) { this.barber = barber; }
+
+    public Product getProduct() { return product; }
+    public void setProduct(Product product) { this.product = product; }
+
+    public Integer getBookingId() { return bookingId; }
+    public void setBookingId(Integer bookingId) { this.bookingId = bookingId; }
+
+    public Long getOrderId() { return orderId; }
+    public void setOrderId(Long orderId) { this.orderId = orderId; }
+
+    public Double getRating() { return rating; }
+    public void setRating(Double rating) { this.rating = rating; }
+
+    public String getComment() { return comment; }
+    public void setComment(String comment) { this.comment = comment; }
+
+    public String getReply() { return reply; }
+    public void setReply(String reply) { this.reply = reply; }
+
+    public String getRepliedByRole() { return repliedByRole; }
+    public void setRepliedByRole(String repliedByRole) { this.repliedByRole = repliedByRole; }
+
+    public String getRepliedByName() { return repliedByName; }
+    public void setRepliedByName(String repliedByName) { this.repliedByName = repliedByName; }
+
+    public LocalDateTime getRepliedAt() { return repliedAt; }
+    public void setRepliedAt(LocalDateTime repliedAt) { this.repliedAt = repliedAt; }
+
+    public LocalDateTime getCreatedAt() { return createdAt; }
+    public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
+
+    public LocalDateTime getUpdatedAt() { return updatedAt; }
+    public void setUpdatedAt(LocalDateTime updatedAt) { this.updatedAt = updatedAt; }
 }

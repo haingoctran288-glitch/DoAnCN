@@ -30,6 +30,9 @@ public class PaymentController {
     @Autowired
     private BookingRepository bookingRepository;
 
+    @Autowired
+    private com.example.API_java.util.EmailService emailService;
+
     // ============================================
     // VNPAY
     // ============================================
@@ -95,9 +98,13 @@ public class PaymentController {
                 Booking booking = bookingRepository.findById(bookingId).orElse(null);
                 if (booking != null) {
                     if ("00".equals(responseCode)) {
+                        boolean alreadyPaid = "PAID".equalsIgnoreCase(booking.getStatus());
                         booking.setStatus("PAID");
                         booking.setTransactionNo(transactionNo);
                         bookingRepository.save(booking);
+                        if (!alreadyPaid) {
+                            emailService.sendBookingConfirmationEmail(booking);
+                        }
                     } else {
                         // Thanh toán thất bại → xóa booking PENDING khỏi DB
                         bookingRepository.delete(booking);
@@ -189,9 +196,13 @@ public class PaymentController {
                     Booking booking = bookingRepository.findById(bookingId).orElse(null);
                     if (booking != null) {
                         if ("0".equals(resultCode)) {
+                            boolean alreadyPaid = "PAID".equalsIgnoreCase(booking.getStatus());
                             booking.setStatus("PAID");
                             booking.setTransactionNo(transactionNo);
                             bookingRepository.save(booking);
+                            if (!alreadyPaid) {
+                                emailService.sendBookingConfirmationEmail(booking);
+                            }
                         } else {
                             // Thanh toán thất bại → xóa booking PENDING khỏi DB
                             bookingRepository.delete(booking);
@@ -233,9 +244,13 @@ public class PaymentController {
                     Booking booking = bookingRepository.findById(bookingId).orElse(null);
                     if (booking != null) {
                         if ("0".equals(resultCode)) {
+                            boolean alreadyPaid = "PAID".equalsIgnoreCase(booking.getStatus());
                             booking.setStatus("PAID");
                             booking.setTransactionNo(transactionNo);
                             bookingRepository.save(booking);
+                            if (!alreadyPaid) {
+                                emailService.sendBookingConfirmationEmail(booking);
+                            }
                         } else {
                             // Thanh toán thất bại → xóa booking PENDING khỏi DB
                             bookingRepository.delete(booking);

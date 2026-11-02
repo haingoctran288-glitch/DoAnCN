@@ -171,8 +171,11 @@ public class ChatService {
                 p.append("Hien chua co voucher nao dang hoat dong.\n");
             } else {
                 vouchers.stream().filter(v -> "ACTIVE".equals(v.getStatus())).forEach(v -> {
-                    String discount = "PERCENTAGE".equals(v.getVoucherType())
-                            ? v.getValue() + "%" : String.format("%,.0f VND", v.getValue());
+                    String discount = "FREE_SERVICE".equals(v.getVoucherType())
+                            ? "Mien phi dich vu"
+                            : "PERCENTAGE".equals(v.getVoucherType())
+                                    ? (v.getValue() != null ? v.getValue() : 0) + "%"
+                                    : String.format("%,.0f VND", v.getValue() != null ? v.getValue() : 0);
                     String minOrder = v.getMinOrderValue() != null
                             ? String.format("%,.0f VND", v.getMinOrderValue()) : "0 VND";
                     p.append("  - Ma: ").append(v.getCode()).append(" | ").append(v.getName())

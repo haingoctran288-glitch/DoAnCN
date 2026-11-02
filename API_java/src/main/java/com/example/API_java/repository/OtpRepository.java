@@ -14,6 +14,9 @@ public interface OtpRepository extends JpaRepository<Otp, Long> {
     // Tìm OTP mới nhất theo email, chưa sử dụng, sắp xếp theo thời gian tạo giảm dần
     Optional<Otp> findTopByEmailAndIsUsedFalseOrderByCreatedAtDesc(String email);
 
+    // Tìm OTP mới nhất theo email (kể cả đã xác thực ở bước trước)
+    Optional<Otp> findTopByEmailOrderByCreatedAtDesc(String email);
+
     // Đếm số lượng OTP đã gửi cho một email từ thời điểm chỉ định
     long countByEmailAndCreatedAtAfter(String email, java.time.LocalDateTime dateTime);
 }

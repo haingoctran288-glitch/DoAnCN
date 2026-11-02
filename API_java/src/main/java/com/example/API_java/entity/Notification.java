@@ -40,4 +40,28 @@ public class Notification {
         if (this.createdAt == null) this.createdAt = LocalDateTime.now();
         if (this.isRead == null) this.isRead = false;
     }
+
+    public Integer getId() { return id; }
+    public void setId(Integer id) { this.id = id; }
+
+    public User getUser() { return user; }
+    public void setUser(User user) { this.user = user; }
+
+    public String getType() { return type; }
+    public void setType(String type) { this.type = type; }
+
+    public String getTitle() { return title; }
+    public void setTitle(String title) { this.title = title; }
+
+    public String getMessage() { return message; }
+    public void setMessage(String message) { this.message = message; }
+
+    public String getDataJson() { return dataJson; }
+    public void setDataJson(String dataJson) { this.dataJson = dataJson; }
+
+    public Boolean getIsRead() { return isRead; }
+    public void setIsRead(Boolean isRead) { this.isRead = isRead; }
+
+    public LocalDateTime getCreatedAt() { return createdAt; }
+    public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
 }

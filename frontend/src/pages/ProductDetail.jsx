@@ -6,6 +6,7 @@ import { useCart } from '../context/CartContext';
 import { useToast } from '../context/ToastContext';
 import { normalizeImageUrl } from '../utils/imageUrl';
 import ReviewList from '../components/ReviewList';
+import axios from 'axios';
 
 const ProductDetail = () => {
   const { id } = useParams();
@@ -17,6 +18,7 @@ const ProductDetail = () => {
   const isFromCart = location.state?.fromCart;
   
   const [product, setProduct] = useState(null);
+  const [reviewStats, setReviewStats] = useState({ averageRating: 0, reviewCount: 0 });
   const [quantity, setQuantity] = useState(1);
   const [loading, setLoading] = useState(true);
   const [mainImage, setMainImage] = useState("");
@@ -32,11 +34,25 @@ const ProductDetail = () => {
 
     const fetchDetail = async () => {
       try {
-        const found = await getProductById(id);
+        const [found, statsRes] = await Promise.all([
+          getProductById(id),
+          axios.get(`http://localhost:8080/api/reviews/product/${id}/stats`).catch(() => ({ data: null }))
+        ]);
         if (found) {
           setProduct(found);
           const imagesArr = [found.image1, found.image2, found.image3].filter(Boolean).map(u => normalizeImageUrl(u));
           setMainImage(imagesArr.length > 0 ? imagesArr[0] : normalizeImageUrl(found.thumbnail));
+        }
+        if (statsRes && statsRes.data) {
+          setReviewStats({
+            averageRating: statsRes.data.averageRating ?? found?.rating ?? 0,
+            reviewCount: statsRes.data.reviewCount ?? found?.reviewCount ?? 0
+          });
+        } else if (found) {
+          setReviewStats({
+            averageRating: found.rating ?? 0,
+            reviewCount: found.reviewCount ?? (found.reviews ? found.reviews.length : 0)
+          });
         }
       } catch (err) {
         console.error("Lỗi fetch Product Detail", err);
@@ -235,10 +251,30 @@ const ProductDetail = () => {
             
             {/* Đánh giá tóm tắt */}
             <div className="flex items-center gap-3 mb-6">
-              <div className="flex text-yellow-400">
-                {[1, 2, 3, 4, 5].map(i => <Star key={i} className="w-5 h-5 fill-current" />)}
+              <div className="flex items-center gap-1 text-yellow-400">
+                {reviewStats.reviewCount > 0 && (
+                  <span className="font-bold text-accent text-sm mr-1 underline underline-offset-4">
+                    {Number(reviewStats.averageRating).toFixed(1)}
+                  </span>
+                )}
+                {[1, 2, 3, 4, 5].map(i => (
+                  <Star
+                    key={i}
+                    className={`w-5 h-5 ${
+                      reviewStats.reviewCount === 0 || i <= Math.round(reviewStats.averageRating)
+                        ? 'fill-current text-yellow-400'
+                        : 'text-gray-700'
+                    }`}
+                  />
+                ))}
               </div>
-              <span className="text-gray-400 text-sm">{product.reviews ? product.reviews.length : 0} Đánh giá</span>
+              <button
+                type="button"
+                onClick={() => document.getElementById('product-reviews')?.scrollIntoView({ behavior: 'smooth' })}
+                className="text-gray-400 hover:text-accent transition-colors text-sm"
+              >
+                {reviewStats.reviewCount} Đánh giá
+              </button>
               <span className="text-gray-600">|</span>
               {(product.stock ?? 0) > 0 ? (
                 <span className="text-green-400 text-sm flex items-center gap-1"><ShieldCheck className="w-4 h-4" /> Còn hàng ({product.stock})</span>
@@ -401,7 +437,9 @@ const ProductDetail = () => {
         </div>
 
         {/* Section Review Khách Hàng */}
-        <ReviewList type="product" itemId={product.id} />
+        <div id="product-reviews">
+          <ReviewList type="product" itemId={product.id} />
+        </div>
 
       </div>
 

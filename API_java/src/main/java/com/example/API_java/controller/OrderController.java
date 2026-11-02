@@ -27,6 +27,9 @@ public class OrderController {
     @Autowired
     private com.example.API_java.repository.NotificationRepository notificationRepository;
 
+    @Autowired
+    private com.example.API_java.util.EmailService emailService;
+
     @GetMapping
     public ResponseEntity<?> getAllOrders(@RequestParam(required = false) String branch, Authentication authentication) {
         String filterBranch = branch;
@@ -137,5 +140,21 @@ public class OrderController {
         Order order = orderService.deliverOrder(id);
         if (order == null) return ResponseEntity.badRequest().body(Map.of("error", "Không tìm thấy đơn"));
         return ResponseEntity.ok(order);
+    }
+
+    @PostMapping("/{id}/resend-email")
+    public ResponseEntity<?> resendOrderEmail(@PathVariable Long id, @RequestParam(defaultValue = "PAID") String type) {
+        Order order = orderService.getOrderById(id);
+        if (order == null) return ResponseEntity.badRequest().body(Map.of("error", "Không tìm thấy đơn hàng"));
+        String email = order.getUser() != null ? order.getUser().getEmail() : null;
+        if (email == null && order.getUserId() != null) {
+            User u = userRepository.findById(order.getUserId().intValue()).orElse(null);
+            if (u != null) email = u.getEmail();
+        }
+        if (email == null || email.trim().isEmpty()) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Khách hàng chưa cập nhật email"));
+        }
+        emailService.sendOrderConfirmationEmail(order, email, type);
+        return ResponseEntity.ok(Map.of("message", "Đã gửi email xác nhận đơn hàng #" + id + " tới " + email));
     }
 }

@@ -4,14 +4,18 @@ import com.example.API_java.entity.Order;
 import com.example.API_java.entity.OrderItem;
 import com.example.API_java.entity.Address;
 import com.example.API_java.entity.Notification;
+import com.example.API_java.entity.User;
 import com.example.API_java.repository.OrderRepository;
 import com.example.API_java.repository.AddressRepository;
 import com.example.API_java.repository.NotificationRepository;
+import com.example.API_java.repository.UserRepository;
+import com.example.API_java.util.EmailService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.HashMap;
 import java.util.Map;
@@ -34,10 +38,67 @@ public class OrderService {
     private NotificationRepository notificationRepository;
 
     @Autowired
+    private UserRepository userRepository;
+
+    @Autowired
+    private EmailService emailService;
+
+    @Autowired
     private VoucherService voucherService;
 
     @Autowired
     private CustomerVoucherRepository customerVoucherRepository;
+
+    private User resolveOrderUser(Order order) {
+        if (order == null) return null;
+        if (order.getUser() != null) return order.getUser();
+        if (order.getUserId() != null && order.getUserId() > 0) {
+            return userRepository.findById(order.getUserId().intValue()).orElse(null);
+        }
+        return null;
+    }
+
+    private String buildOrderDataJson(Order order, String cancelReason) {
+        try {
+            Map<String, Object> dataMap = new HashMap<>();
+            dataMap.put("order_id", order.getId());
+            dataMap.put("total_price", order.getTotalPrice());
+            dataMap.put("shipping_fee", order.getShippingFee());
+            dataMap.put("payment_method", order.getPaymentMethod());
+            dataMap.put("payment_status", order.getPaymentStatus());
+            dataMap.put("transaction_no", order.getVnpTransactionNo());
+            dataMap.put("customer_name", order.getName());
+            dataMap.put("phone", order.getPhone());
+            dataMap.put("address", order.getAddress());
+            dataMap.put("order_branch", order.getOrderBranch());
+            dataMap.put("status", order.getStatus());
+            if (order.getCreatedAt() != null) {
+                dataMap.put("created_at", order.getCreatedAt().toString());
+            }
+            if (cancelReason != null) {
+                dataMap.put("cancel_reason", cancelReason);
+            }
+
+            List<Map<String, Object>> itemMaps = new ArrayList<>();
+            if (order.getItems() != null) {
+                for (OrderItem item : order.getItems()) {
+                    Map<String, Object> im = new HashMap<>();
+                    im.put("productId", item.getProductId());
+                    im.put("productName", item.getProductName());
+                    im.put("productImage", item.getProductImage());
+                    im.put("quantity", item.getQuantity());
+                    im.put("price", item.getPrice());
+                    itemMaps.add(im);
+                }
+            }
+            dataMap.put("items", itemMaps);
+
+            ObjectMapper mapper = new ObjectMapper();
+            return mapper.writeValueAsString(dataMap);
+        } catch (Exception e) {
+            return "{}";
+        }
+    }
 
     @Transactional
     public Order createOrder(Order order) {
@@ -108,6 +169,31 @@ public class OrderService {
                 voucherService.evaluateCampaigns(order.getUserId().intValue(), "ORDER_VALUE_OVER_X", saved.getTotalPrice());
             } catch (Exception e) {
                 System.err.println("Error evaluating ORDER_VALUE_OVER_X campaigns: " + e.getMessage());
+            }
+        }
+
+        // Nếu đặt hàng COD -> gửi thông báo + gửi email xác nhận đơn hàng ngay lập tức
+        // (Đối với VNPAY/MOMO sẽ gửi sau khi thanh toán thành công tại updatePaymentSuccess)
+        if ("COD".equalsIgnoreCase(saved.getPaymentMethod()) || saved.getPaymentMethod() == null) {
+            User customer = resolveOrderUser(saved);
+            if (customer != null) {
+                try {
+                    Notification notif = new Notification();
+                    notif.setUser(customer);
+                    notif.setType("approve");
+                    notif.setTitle("🛒 Đặt hàng thành công #" + saved.getId());
+                    notif.setMessage("Cảm ơn quý khách đã đặt hàng tại Hornet Royale! Đơn hàng mã số #" + saved.getId() + " đã được tiếp nhận và đang chờ xác nhận.");
+                    notif.setDataJson(buildOrderDataJson(saved, null));
+                    notificationRepository.save(notif);
+                } catch (Exception e) {
+                    System.err.println("Error saving COD order notification: " + e.getMessage());
+                }
+
+                try {
+                    emailService.sendOrderConfirmationEmail(saved, customer.getEmail(), "NEW");
+                } catch (Exception e) {
+                    System.err.println("Error sending COD order email: " + e.getMessage());
+                }
             }
         }
 
@@ -182,10 +268,11 @@ public class OrderService {
         
         Order savedOrder = orderRepository.save(order);
 
-        // Send cancel notification to customer
-        if (savedOrder.getUser() != null) {
+        // Send cancel notification & email to customer
+        User customer = resolveOrderUser(savedOrder);
+        if (customer != null) {
             Notification notif = new Notification();
-            notif.setUser(savedOrder.getUser());
+            notif.setUser(customer);
             notif.setType("cancel");
             notif.setTitle("❌ Đơn hàng #" + savedOrder.getId() + " đã bị hủy");
             
@@ -194,18 +281,14 @@ public class OrderService {
                 msg += " Hệ thống đã tiến hành hoàn tiền qua " + order.getPaymentMethod() + ".";
             }
             notif.setMessage(msg);
-            
-            Map<String, Object> dataMap = new HashMap<>();
-            dataMap.put("order_id", savedOrder.getId());
-            dataMap.put("total_price", savedOrder.getTotalPrice());
-            dataMap.put("cancel_reason", reason);
-            try {
-                ObjectMapper mapper = new ObjectMapper();
-                notif.setDataJson(mapper.writeValueAsString(dataMap));
-            } catch (Exception e) {
-                notif.setDataJson("{}");
-            }
+            notif.setDataJson(buildOrderDataJson(savedOrder, reason));
             notificationRepository.save(notif);
+
+            try {
+                emailService.sendOrderConfirmationEmail(savedOrder, customer.getEmail(), "CANCELLED");
+            } catch (Exception e) {
+                System.err.println("Error sending cancel order email: " + e.getMessage());
+            }
         }
 
         return savedOrder;
@@ -229,24 +312,22 @@ public class OrderService {
             }
         }
 
-        // Send approve notification to customer
-        if (savedOrder.getUser() != null) {
+        // Send approve notification & email to customer
+        User customer = resolveOrderUser(savedOrder);
+        if (customer != null) {
             Notification notif = new Notification();
-            notif.setUser(savedOrder.getUser());
+            notif.setUser(customer);
             notif.setType("approve"); // Map to green style in frontend
             notif.setTitle("✅ Đơn hàng #" + savedOrder.getId() + " đã được duyệt");
             notif.setMessage("Đơn hàng mã số #" + savedOrder.getId() + " của bạn đã được duyệt thành công. Cảm ơn quý khách đã tin tưởng và mua sắm sản phẩm tại Hornet Royale!");
-            
-            Map<String, Object> dataMap = new HashMap<>();
-            dataMap.put("order_id", savedOrder.getId());
-            dataMap.put("total_price", savedOrder.getTotalPrice());
-            try {
-                ObjectMapper mapper = new ObjectMapper();
-                notif.setDataJson(mapper.writeValueAsString(dataMap));
-            } catch (Exception e) {
-                notif.setDataJson("{}");
-            }
+            notif.setDataJson(buildOrderDataJson(savedOrder, null));
             notificationRepository.save(notif);
+
+            try {
+                emailService.sendOrderConfirmationEmail(savedOrder, customer.getEmail(), "CONFIRMED");
+            } catch (Exception e) {
+                System.err.println("Error sending confirm order email: " + e.getMessage());
+            }
         }
 
         return savedOrder;
@@ -269,24 +350,22 @@ public class OrderService {
             }
         }
 
-        // Send delivery notification to customer
-        if (savedOrder.getUser() != null) {
+        // Send delivery notification & email to customer
+        User customer = resolveOrderUser(savedOrder);
+        if (customer != null) {
             Notification notif = new Notification();
-            notif.setUser(savedOrder.getUser());
+            notif.setUser(customer);
             notif.setType("approve"); // Map to green style in frontend or create new style
             notif.setTitle("📦 Đơn hàng #" + savedOrder.getId() + " đã giao thành công");
             notif.setMessage("Đơn hàng mã số #" + savedOrder.getId() + " của bạn đã được giao đến tay bạn. Cảm ơn bạn đã sử dụng dịch vụ của chúng tôi!");
-            
-            Map<String, Object> dataMap = new HashMap<>();
-            dataMap.put("order_id", savedOrder.getId());
-            dataMap.put("total_price", savedOrder.getTotalPrice());
-            try {
-                ObjectMapper mapper = new ObjectMapper();
-                notif.setDataJson(mapper.writeValueAsString(dataMap));
-            } catch (Exception e) {
-                notif.setDataJson("{}");
-            }
+            notif.setDataJson(buildOrderDataJson(savedOrder, null));
             notificationRepository.save(notif);
+
+            try {
+                emailService.sendOrderConfirmationEmail(savedOrder, customer.getEmail(), "DELIVERED");
+            } catch (Exception e) {
+                System.err.println("Error sending deliver order email: " + e.getMessage());
+            }
         }
 
         return savedOrder;
@@ -296,11 +375,35 @@ public class OrderService {
     public void updatePaymentSuccess(Long orderId, String transactionNo) {
         Order order = orderRepository.findById(orderId).orElse(null);
         if (order != null) {
+            boolean alreadyPaid = "PAID".equalsIgnoreCase(order.getPaymentStatus());
             // Keep status as pending so admin can review and approve/cancel manually
             order.setPaymentStatus("PAID");
             order.setVnpTransactionNo(transactionNo);
             order.setPaidAt(LocalDateTime.now());
-            orderRepository.save(order);
+            Order savedOrder = orderRepository.save(order);
+
+            if (!alreadyPaid) {
+                User customer = resolveOrderUser(savedOrder);
+                if (customer != null) {
+                    try {
+                        Notification notif = new Notification();
+                        notif.setUser(customer);
+                        notif.setType("approve");
+                        notif.setTitle("💳 Thanh toán & Đặt hàng thành công #" + savedOrder.getId());
+                        notif.setMessage("Đơn hàng mã số #" + savedOrder.getId() + " của bạn đã được thanh toán thành công qua " + savedOrder.getPaymentMethod() + " và đang chờ xác nhận.");
+                        notif.setDataJson(buildOrderDataJson(savedOrder, null));
+                        notificationRepository.save(notif);
+                    } catch (Exception e) {
+                        System.err.println("Error saving payment success notification: " + e.getMessage());
+                    }
+
+                    try {
+                        emailService.sendOrderConfirmationEmail(savedOrder, customer.getEmail(), "PAID");
+                    } catch (Exception e) {
+                        System.err.println("Error sending payment success email: " + e.getMessage());
+                    }
+                }
+            }
         }
     }
 
@@ -313,4 +416,3 @@ public class OrderService {
         }
     }
 }
-

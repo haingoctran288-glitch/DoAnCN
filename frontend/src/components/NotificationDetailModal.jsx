@@ -12,6 +12,7 @@ const NotificationDetailModal = ({ isOpen, onClose, notification }) => {
   const [reportDetails, setReportDetails] = React.useState('');
   const [isReporting, setIsReporting] = React.useState(false);
   const [isReportedLocally, setIsReportedLocally] = React.useState(false);
+  const [fetchedOrder, setFetchedOrder] = React.useState(null);
 
   const reportOptions = [
     "Thái độ không tốt - Thiếu chuyên nghiệp",
@@ -24,13 +25,26 @@ const NotificationDetailModal = ({ isOpen, onClose, notification }) => {
   useEffect(() => {
     if (isOpen) {
       document.body.style.overflow = 'hidden';
+      try {
+        const parsed = notification?.dataJson ? JSON.parse(notification.dataJson) : {};
+        if (parsed.order_id) {
+          axios.get(`http://localhost:8080/api/orders/${parsed.order_id}`)
+            .then(res => setFetchedOrder(res.data))
+            .catch(() => setFetchedOrder(null));
+        } else {
+          setFetchedOrder(null);
+        }
+      } catch (e) {
+        setFetchedOrder(null);
+      }
     } else {
       document.body.style.overflow = 'unset';
+      setFetchedOrder(null);
     }
     return () => {
       document.body.style.overflow = 'unset';
     };
-  }, [isOpen]);
+  }, [isOpen, notification]);
 
   if (!isOpen || !notification) return null;
 
@@ -262,6 +276,18 @@ const NotificationDetailModal = ({ isOpen, onClose, notification }) => {
   }
 
   if (isOrder) {
+    const orderItems = (fetchedOrder && fetchedOrder.items && fetchedOrder.items.length > 0)
+      ? fetchedOrder.items
+      : (detailData.items || []);
+    const customerName = fetchedOrder?.name || detailData.customer_name || 'Quý khách';
+    const customerPhone = fetchedOrder?.phone || detailData.phone || 'Đang cập nhật';
+    const customerAddress = fetchedOrder?.address || detailData.address || 'Đang cập nhật';
+    const paymentMethod = fetchedOrder?.paymentMethod || detailData.payment_method || 'COD';
+    const paymentStatus = fetchedOrder?.paymentStatus || detailData.payment_status || '';
+    const orderStatus = fetchedOrder?.status || detailData.status || '';
+    const isDelivered = orderStatus === 'delivered' || notification.title?.toLowerCase().includes('đã giao');
+    const isNewPlaced = notification.title?.toLowerCase().includes('đặt hàng thành công');
+
     // ────────────── ORDER NOTIFICATION RENDER ──────────────
     return (
       <div className="fixed inset-0 flex items-center justify-center p-4" style={{ zIndex: 999999 }}>
@@ -272,10 +298,10 @@ const NotificationDetailModal = ({ isOpen, onClose, notification }) => {
         ></div>
 
         {/* Modal */}
-        <div className={`relative w-full max-w-lg bg-[#111] border ${isCancel ? 'border-red-500/30 shadow-[0_0_50px_rgba(220,38,38,0.15)]' : 'border-[#38bdf8]/30 shadow-[0_0_50px_rgba(56,189,248,0.15)]'} rounded-2xl overflow-hidden animate-in zoom-in-95 duration-300`}>
+        <div className={`relative w-full max-w-lg max-h-[90vh] flex flex-col bg-[#111] border ${isCancel ? 'border-red-500/30 shadow-[0_0_50px_rgba(220,38,38,0.15)]' : 'border-[#38bdf8]/30 shadow-[0_0_50px_rgba(56,189,248,0.15)]'} rounded-2xl overflow-hidden animate-in zoom-in-95 duration-300`}>
           
           {/* Header */}
-          <div className={`bg-gradient-to-r ${isCancel ? 'from-red-900/40' : 'from-[#0284c7]/40'} to-transparent p-6 border-b ${isCancel ? 'border-red-500/20' : 'border-[#38bdf8]/20'}`}>
+          <div className={`bg-gradient-to-r ${isCancel ? 'from-red-900/40' : 'from-[#0284c7]/40'} to-transparent p-6 border-b ${isCancel ? 'border-red-500/20' : 'border-[#38bdf8]/20'} shrink-0`}>
             <button 
               onClick={onClose}
               className="absolute top-4 right-4 text-gray-400 hover:text-white transition-colors p-2 hover:bg-white/5 rounded-full"
@@ -287,40 +313,84 @@ const NotificationDetailModal = ({ isOpen, onClose, notification }) => {
                 {isCancel ? <span className="text-xl font-black">!</span> : <CheckCircle className="w-5 h-5" />}
               </div>
               <h3 className="text-xl font-heading font-black text-white uppercase tracking-wider">
-                {isCancel ? 'Chi Tiết Hủy Đơn Hàng' : 'Chi Tiết Duyệt Đơn Hàng'}
+                {isCancel ? 'Chi Tiết Hủy Đơn Hàng' : isDelivered ? 'Chi Tiết Giao Đơn Hàng' : isNewPlaced ? 'Chi Tiết Đặt Hàng' : 'Chi Tiết Duyệt Đơn Hàng'}
               </h3>
             </div>
-            <p className="text-gray-300 text-sm pl-13 leading-relaxed mt-4">
+            <p className="text-gray-300 text-sm pl-13 leading-relaxed mt-3">
               {notification.message}
             </p>
           </div>
 
           {/* Content */}
-          <div className="p-6 space-y-4 max-h-[60vh] overflow-y-auto custom-scrollbar">
+          <div className="p-5 space-y-3.5 overflow-y-auto custom-scrollbar flex-1">
             
-            <div className="grid grid-cols-2 gap-4">
-              <div className="bg-[#1a1a1a] p-4 rounded-xl border border-gray-800">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="bg-[#1a1a1a] p-3.5 rounded-xl border border-gray-800">
                 <div className="flex items-center gap-2 text-gray-500 mb-1">
                   <Hash className="w-4 h-4" />
                   <span className="text-xs font-bold uppercase">Mã đơn hàng</span>
                 </div>
-                <p className="text-white font-medium">#{detailData.order_id || 'N/A'}</p>
+                <p className="text-white font-bold">#{detailData.order_id || 'N/A'}</p>
               </div>
-              <div className="bg-[#1a1a1a] p-4 rounded-xl border border-gray-800">
+              <div className="bg-[#1a1a1a] p-3.5 rounded-xl border border-gray-800">
                 <div className="flex items-center gap-2 text-gray-500 mb-1">
                   <CreditCard className="w-4 h-4" />
                   <span className="text-xs font-bold uppercase">Tổng giá trị</span>
                 </div>
-                <p className="text-accent font-medium">
+                <p className="text-accent font-bold">
                   {detailData.total_price ? Number(detailData.total_price).toLocaleString('vi-VN') + '₫' : 'N/A'}
                 </p>
               </div>
             </div>
 
+            {/* Thông tin người nhận & Thanh toán */}
+            <div className="bg-[#1a1a1a] p-4 rounded-xl border border-gray-800 space-y-2.5 text-sm">
+              <div className="flex items-center justify-between border-b border-gray-800/80 pb-2">
+                <span className="text-gray-400 flex items-center gap-2"><User className="w-4 h-4 text-accent" /> Người nhận:</span>
+                <span className="text-white font-semibold">{customerName}</span>
+              </div>
+              <div className="flex items-center justify-between border-b border-gray-800/80 pb-2">
+                <span className="text-gray-400 flex items-center gap-2"><Phone className="w-4 h-4 text-accent" /> Số điện thoại:</span>
+                <span className="text-gray-200">{customerPhone}</span>
+              </div>
+              <div className="flex items-start justify-between gap-4 border-b border-gray-800/80 pb-2">
+                <span className="text-gray-400 flex items-center gap-2 shrink-0"><MapPin className="w-4 h-4 text-accent" /> Địa chỉ:</span>
+                <span className="text-gray-200 text-right">{customerAddress}</span>
+              </div>
+              <div className="flex items-center justify-between pt-0.5">
+                <span className="text-gray-400 flex items-center gap-2"><CreditCard className="w-4 h-4 text-accent" /> Thanh toán:</span>
+                <span className="font-bold text-xs px-2.5 py-1 rounded-full bg-accent/10 text-accent border border-accent/20">
+                  {paymentMethod} {paymentStatus === 'PAID' ? '• Đã thanh toán' : '• Khi nhận hàng'}
+                </span>
+              </div>
+            </div>
+
+            {/* Danh sách sản phẩm trong đơn */}
+            {orderItems.length > 0 && (
+              <div className="bg-[#1a1a1a] p-4 rounded-xl border border-gray-800">
+                <p className="text-xs text-gray-400 font-bold uppercase tracking-wider mb-3">
+                  Sản phẩm đã đặt ({orderItems.length})
+                </p>
+                <div className="space-y-2.5 max-h-40 overflow-y-auto custom-scrollbar pr-1">
+                  {orderItems.map((item, idx) => (
+                    <div key={idx} className="flex items-center justify-between gap-3 bg-[#121212] p-2.5 rounded-lg border border-gray-800/70">
+                      <div className="min-w-0 flex-1">
+                        <p className="text-white text-sm font-medium truncate">{item.productName || `Sản phẩm #${item.productId}`}</p>
+                        <p className="text-xs text-gray-500">Số lượng: x{item.quantity}</p>
+                      </div>
+                      <span className="text-accent font-bold text-sm shrink-0">
+                        {Number((item.price || 0) * (item.quantity || 1)).toLocaleString('vi-VN')}₫
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {isCancel && (
               <div className="bg-[#1a1a1a] p-4 rounded-xl border border-red-500/20">
                 <p className="text-xs text-gray-500 font-bold uppercase mb-1">Lý do hủy đơn</p>
-                <p className="text-red-400 font-medium text-sm">{detailData.cancel_reason || 'Không có lý do chi tiết.'}</p>
+                <p className="text-red-400 font-medium text-sm">{detailData.cancel_reason || fetchedOrder?.cancelReason || 'Không có lý do chi tiết.'}</p>
               </div>
             )}
 
@@ -329,7 +399,13 @@ const NotificationDetailModal = ({ isOpen, onClose, notification }) => {
                 <Package className="w-5 h-5 text-[#38bdf8] shrink-0 mt-0.5" />
                 <div>
                   <p className="text-xs text-gray-500 font-bold uppercase mb-1">Trạng thái giao hàng</p>
-                  <p className="text-[#38bdf8] font-medium text-sm">Đã xác nhận & đang chuẩn bị bàn giao vận chuyển.</p>
+                  <p className="text-[#38bdf8] font-medium text-sm">
+                    {isDelivered
+                      ? 'Đơn hàng đã được giao thành công đến quý khách.'
+                      : orderStatus === 'pending' && isNewPlaced
+                        ? 'Đơn hàng đã được tiếp nhận & đang chờ xác nhận.'
+                        : 'Đã xác nhận & đang chuẩn bị bàn giao vận chuyển.'}
+                  </p>
                 </div>
               </div>
             )}
@@ -337,7 +413,7 @@ const NotificationDetailModal = ({ isOpen, onClose, notification }) => {
           </div>
 
           {/* Footer */}
-          <div className="p-6 bg-[#1a1a1a] border-t border-gray-800 flex gap-3">
+          <div className="p-5 bg-[#1a1a1a] border-t border-gray-800 flex gap-3 shrink-0">
             <button 
               onClick={onClose}
               className="flex-1 py-3 px-4 rounded-xl border border-gray-700 text-gray-300 font-bold uppercase tracking-wider text-sm hover:bg-gray-800 transition-colors"
